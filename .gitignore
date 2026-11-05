@@ -1,0 +1,4 @@
+# Runtime data exchanged over the HTTP bridge (recreated by network-connection.py)
+inbox/
+outbox/
+archive/
