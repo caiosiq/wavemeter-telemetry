@@ -1,4 +1,7 @@
-# Runtime data exchanged over the HTTP bridge (recreated by network-connection.py)
+# Real runtime data on Zoe's Computer, exchanged over the HTTP bridge
 inbox/
 outbox/
 archive/
+
+# Fake data written by the simulator, network-connection.py
+simulator_data/

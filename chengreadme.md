@@ -4,6 +4,8 @@ Use this guide to try laser lock parameters from your computer. You send a `test
 
 The full contract is in [README.md](README.md).
 
+> **`network-connection.py` in this repository is a simulator.** It is not connected to any laser, and all of its telemetry is fake. To reach the real laser, you connect to Zoe's Computer on port `5000`.
+
 ---
 
 ## Before You Start
@@ -11,6 +13,30 @@ The full contract is in [README.md](README.md).
 1. **Get the address of Zoe's Computer from the Yan lab.** It replaces `<zoe-computer>` below. Your computer must be on a network that can reach it on port `5000`.
 2. **Ask the Yan lab to set up the app.** Chin Sweep must be started with the Test checkbox ticked, and locking must be running. Nothing answers on port `5000` until Chin Sweep is started, and the checkbox chooses the mode, not your file. If locking is stopped, uploads still return `200`, but no sweeps run and the telemetry does not change.
 3. **Install the Python packages:** `pip install numpy requests`
+
+---
+
+## Practice With the Simulator
+
+You can try everything in this guide on your own computer, without the Yan lab or the laser.
+
+> **Simulated results are fake.** Use the simulator to test your code, and never use its numbers to choose real gains. The laser in it is a short made-up model, so gains that look best here may not be best on the real laser.
+
+1. Start the simulator and leave it running:
+
+   ```bash
+   python network-connection.py
+   ```
+
+2. In the commands and script below, use `127.0.0.1:5050` in place of `<zoe-computer>:5000`.
+
+3. To practice a failure, restart it with `--locking-stopped`. Uploads still return `200`, but `/status` reports `locker_running` as `false` and the telemetry does not change.
+
+To practice Run Mode, use `--mode run`. A timer stands in for the hardware trigger. The other options are in Section 6 of [README.md](README.md).
+
+**Telling the two apart:** the simulator's `/status` reply has `"simulated": true`, and its `message` starts with `SIMULATOR`. Its telemetry has an extra `SIMULATED` column, and the example script below prints a warning. The real system has none of these.
+
+Its files are kept in `simulator_data/`, away from any real data.
 
 ---
 
@@ -136,7 +162,7 @@ The wavemeter is shared between lasers, so the first few milliseconds of an atte
 
 ## Example: Compare Several Sets of Gains
 
-This script tries each set of gains, waits for the telemetry from that exact upload, saves it, and prints the RMS error of the samples from this laser. Set `BRIDGE` to the address of Zoe's Computer, and change `GAINS` to the values you want to try.
+This script tries each set of gains, waits for the telemetry from that exact upload, saves it, and prints the RMS error of the samples from this laser. Set `BRIDGE` to the address of Zoe's Computer, or to `http://127.0.0.1:5050` for the simulator, and change `GAINS` to the values you want to try.
 
 ```python
 import io
@@ -175,6 +201,8 @@ def check_ready():
     reply = requests.get(f"{BRIDGE}/status", timeout=10)
     reply.raise_for_status()
     status = reply.json()
+    if status.get("simulated"):
+        print("SIMULATOR: this is not the real laser, and these results are fake.")
     if not status.get("locker_running"):
         raise RuntimeError("Locking is stopped. Ask the Yan lab to start it.")
     if status.get("mode") != "TEST":
@@ -231,6 +259,7 @@ for number, (kp, ki, kd) in enumerate(GAINS, start=1):
 | What you see | What it means | What to do |
 | :--- | :--- | :--- |
 | Connection refused or timed out | Chin Sweep is not started, or your network cannot reach Zoe's Computer. | Ask the Yan lab to check. |
+| `/status` shows `"simulated": true`, or the script prints a `SIMULATOR` warning | You are connected to the simulator, so the results are fake. | Set `BRIDGE` to Zoe's Computer for real results. |
 | `404` on `/status` | The app on Zoe's Computer has not been restarted since `/status` was added. | Ask the Yan lab to restart it. |
 | `400 Bad filename` | The `X-Filename` header is wrong. | Use exactly `test_params.txt`. |
 | `500` | The file was in use for a moment. | Send it again. The example script does this for you. |

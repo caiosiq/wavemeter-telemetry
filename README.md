@@ -4,6 +4,8 @@ This document defines the communication protocol, file formats, and execution mo
 
 For the steps to send test parameters from Cheng's Computer, see [chengreadme.md](chengreadme.md).
 
+> **`network-connection.py` is a simulator, not the real system.** It is not connected to any laser and all of its telemetry is fake. The real system is the laser locking app on Zoe's Computer, which is not in this repository. See Section 6.
+
 Changes to this contract should be agreed by both labs and made here, in the same change as any update to `network-connection.py`.
 
 ---
@@ -11,7 +13,7 @@ Changes to this contract should be agreed by both labs and made here, in the sam
 ## 1. System Overview & Transport Layer
 
 * **Protocol:** HTTP on port `5000` of Zoe's Computer.
-* **Availability:** On Zoe's Computer, the laser locking app serves these endpoints only while its Chin Sweep feature is started. `network-connection.py` is a standalone server with the same endpoints. It moves files but runs no sweeps, and it cannot run while the app holds the port.
+* **Availability:** The laser locking app on Zoe's Computer serves these endpoints only while its Chin Sweep feature is started.
 * **Access:** The server listens on all network interfaces and has no authentication, so anyone who can reach the port can queue a sweep. Keep it on a trusted network.
 
 ### Endpoints
@@ -67,7 +69,7 @@ Changes to this contract should be agreed by both labs and made here, in the sam
 | `last_telemetry`, `last_samples` | The newest telemetry file and its number of samples. |
 | `message` | The latest message, such as why `test_params.txt` was ignored. |
 
-`locker_running` does not show that the laser is on frequency. Use the telemetry for that. The standalone `network-connection.py` runs no sweeps, so it returns only `state`, `running`, `locker_running` and `message`, with `locker_running` always `false`.
+`locker_running` does not show that the laser is on frequency. Use the telemetry for that. The simulator adds `"simulated": true` to this reply. The real system does not send that field.
 
 ---
 
@@ -191,3 +193,49 @@ These columns are followed by one field per key in the parameter file, repeated 
 | :--- | :--- |
 | **Cheng's Computer (Mac)** | • Analyzes incoming telemetry.<br>• Computes binary search adjustments & PID updates.<br>• Uploads timestamped `params_*.txt` files in Run Mode, and overwrites `test_params.txt` in Test Mode. |
 | **Zoe's Computer (Win 11)** | • Hosts the HTTP bridge on port `5000`.<br>• Monitors the `inbox` and archives processed parameter files.<br>• Listens for hardware TTL triggers in Run Mode, and repeats the `test_params.txt` sweep in Test Mode.<br>• Writes time-series telemetry `.npy` files into the `outbox`. |
+
+---
+
+## 6. Simulator (`network-connection.py`)
+
+> **Everything the simulator produces is fake.** Use it to practice and to test client code. Never use its numbers to choose real gains.
+
+`network-connection.py` is a local stand-in for the real system, so client code can be developed without Zoe's Computer or the laser. It needs `numpy`.
+
+```bash
+python network-connection.py
+```
+
+| Option | Effect | Default |
+| :--- | :--- | :--- |
+| `--mode test` or `--mode run` | Stands in for the app's Test checkbox. | `test` |
+| `--locking-stopped` | Behaves as if locking were stopped, to practice that failure. | Off |
+| `--dwell-ms` | Length of a Test Mode attempt, limited to 200 ms. | `50` |
+| `--trigger-period` | Seconds between simulated Run Mode triggers. | `1.0` |
+| `--port` | Port to listen on. | `5050` |
+| `--host` | Address to listen on. The default is reachable only from the same computer. | `127.0.0.1` |
+
+### Real and simulated
+
+| | Real system | Simulator |
+| :--- | :--- | :--- |
+| Address | Zoe's Computer, port `5000` | The same computer, port `5050` |
+| Laser and wavemeter | Real | A short made-up model |
+| Run Mode trigger | Hardware TTL | A timer |
+| Data folders | `inbox/`, `outbox/`, `archive/` | `simulator_data/` only |
+| Mode | The app's Test checkbox | `--mode` |
+| `/status` | No `simulated` field | `"simulated": true`, and `message` starts with `SIMULATOR` |
+| Telemetry | Real measurements | Fake, with an extra `SIMULATED` column set to `TRUE` |
+| HTTP responses | No extra header | `X-Simulator: true` |
+
+The simulator copies the endpoints, filename rules, parameter checks and telemetry format. It also copies the behavior that affects clients: `test_params.txt` is reread when it changes, an invalid file is ignored while the previous sweep continues, attempts are limited by the dwell time, the first samples are another laser, and no sweeps run while locking is stopped.
+
+The simulated gains do change the fake telemetry, but the laser model is illustrative and not measured, so a better result here does not mean a better result on the real laser.
+
+If a saved telemetry file might be fake, check for the `SIMULATED` column:
+
+```python
+print("SIMULATED" in data.dtype.names)
+```
+
+When the real system changes in a way clients can see, update `network-connection.py` and this contract together.
